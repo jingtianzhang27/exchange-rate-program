@@ -1,0 +1,7 @@
+{
+  "description": "中行美元现汇买入价监测",
+  "appid": "touristappid",
+  "projectname": "exchange-rate-monitor",
+  "compileType": "miniprogram",
+  "setting": {"es6": true, "minified": true, "urlCheck": true}
+}

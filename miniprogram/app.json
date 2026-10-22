@@ -1,0 +1,5 @@
+{
+  "pages": ["pages/index/index"],
+  "window": {"navigationBarTitleText": "美元结汇观察", "navigationBarBackgroundColor": "#f5f7f8", "navigationBarTextStyle": "black", "backgroundColor": "#f5f7f8"},
+  "style": "v2"
+}
