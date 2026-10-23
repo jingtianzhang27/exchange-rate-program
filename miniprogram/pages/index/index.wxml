@@ -2,47 +2,47 @@
   <view class="eyebrow">BOC · USD / CNY</view>
   <view class="heading">美元结汇观察</view>
   <view class="subtitle">关注每一次变化，把握你的结汇时机</view>
-  <view wx:if="status.demo" class="warn">演示模式 · 全部行情为模拟数据，不发送微信通知</view>
-  <view wx:if="error" class="warn error">{{error}} <text bindtap="refresh">点击重试</text></view>
+  <view wx:if="{{status.demo}}" class="warn">演示模式 · 全部行情为模拟数据，不发送微信通知</view>
+  <view wx:if="{{error}}" class="warn error">{{error}} <text bindtap="refresh">点击重试</text></view>
   <view class="card quote">
     <view class="row"><text class="muted">中国银行 · 美元现汇买入价</text><text class="tag">结汇参考</text></view>
     <view class="price">{{quotePrice}}<text class="unit"> 元</text></view>
     <view class="muted">1 美元兑人民币 · 已从每 100 美元牌价换算</view>
     <view class="divider"></view>
     <view class="row muted"><text>{{quoteTime}}</text><text bindtap="refresh">刷新 ↻</text></view>
-    <view wx:if="status.stale" class="error small">报价已过期或尚未取得，请勿当作实时价格</view>
-    <view wx:if="status.error" class="error small">{{status.error}}</view>
+    <view wx:if="{{status.stale}}" class="error small">报价已过期或尚未取得，请勿当作实时价格</view>
+    <view wx:if="{{status.error}}" class="error small">{{status.error}}</view>
   </view>
   <view class="tabs"><view class="tab {{tab === 'chart' ? 'active' : ''}}" data-tab="chart" bindtap="selectTab">走势分析</view><view class="tab {{tab === 'rules' ? 'active' : ''}}" data-tab="rules" bindtap="selectTab">监测提醒</view><view class="tab {{tab === 'alerts' ? 'active' : ''}}" data-tab="alerts" bindtap="selectTab">提醒记录</view></view>
-  <view wx:if="tab === 'chart'" class="card">
+  <view wx:if="{{tab === 'chart'}}" class="card">
     <view class="section">汇率走势</view>
-    <view class="row"><picker mode="date" value="fromDate" bindchange="fromDateChange"><view class="field small">{{fromDate}}</view></picker><picker mode="time" value="fromTime" bindchange="fromTimeChange"><view class="field small">{{fromTime}}</view></picker></view>
-    <view class="row"><picker mode="date" value="toDate" bindchange="toDateChange"><view class="field small">{{toDate}}</view></picker><picker mode="time" value="toTime" bindchange="toTimeChange"><view class="field small">{{toTime}}</view></picker><button size="mini" bindtap="loadHistory" loading="chartBusy">查询</button></view>
+    <view class="row"><picker mode="date" value="{{fromDate}}" bindchange="fromDateChange"><view class="field small">{{fromDate}}</view></picker><picker mode="time" value="{{fromTime}}" bindchange="fromTimeChange"><view class="field small">{{fromTime}}</view></picker></view>
+    <view class="row"><picker mode="date" value="{{toDate}}" bindchange="toDateChange"><view class="field small">{{toDate}}</view></picker><picker mode="time" value="{{toTime}}" bindchange="toTimeChange"><view class="field small">{{toTime}}</view></picker><button size="mini" bindtap="loadHistory" loading="{{chartBusy}}">查询</button></view>
     <canvas type="2d" id="rateChart" class="chart"></canvas>
-    <view wx:if="!pointCount" class="empty">该时段暂无数据，历史记录从采集开始积累</view>
-    <view wx:if="stats" class="row small"><text>最低 {{stats.low}}</text><text>最高 {{stats.high}}</text><text>变化 {{stats.change}}</text></view>
+    <view wx:if="{{!pointCount}}" class="empty">该时段暂无数据，历史记录从采集开始积累</view>
+    <view wx:if="{{stats}}" class="row small"><text>最低 {{stats.low}}</text><text>最高 {{stats.high}}</text><text>变化 {{stats.change}}</text></view>
     <view class="muted">北京时间 · 采样曲线，空白间隔不代表持续报价；共 {{pointCount}} 条原始记录</view>
     <view class="divider"></view>
-    <button class="primary" bindtap="analyze" loading="aiBusy" disabled="aiBusy || pointCount &lt; 2">分析所选时段</button>
-    <view wx:if="analysis" class="analysis"><text class="tag">{{analysis.mode === 'ai' ? 'AI 趋势分析' : '历史统计 · 未接入 AI'}}</text><view class="analysis-text">{{analysis.text}}</view></view>
+    <button class="primary" bindtap="analyze" loading="{{aiBusy}}" disabled="{{aiBusy || 2 > pointCount}}">分析所选时段</button>
+    <view wx:if="{{analysis}}" class="analysis"><text class="tag">{{analysis.mode === 'ai' ? 'AI 趋势分析' : '历史统计 · 未接入 AI'}}</text><view class="analysis-text">{{analysis.text}}</view></view>
     <view class="muted">历史走势不代表未来，银行实际成交价格以交易时为准。</view>
   </view>
-  <view wx:if="tab === 'rules'">
+  <view wx:if="{{tab === 'rules'}}">
     <view class="card">
       <view class="section">新建监测</view>
-      <view class="row"><text>每天监测时段</text><picker mode="time" value="start" bindchange="startChange"><view class="field">{{start}}</view></picker><text>至</text><picker mode="time" value="end" bindchange="endChange"><view class="field">{{end}}</view></picker></view>
+      <view class="row"><text>每天监测时段</text><picker mode="time" value="{{start}}" bindchange="startChange"><view class="field">{{start}}</view></picker><text>至</text><picker mode="time" value="{{end}}" bindchange="endChange"><view class="field">{{end}}</view></picker></view>
       <view class="muted">北京时间，支持跨午夜；每天自动重置提醒。</view>
       <radio-group bindchange="kindChange" class="choices"><label><radio value="movement" checked="{{kind === 'movement'}}" color="#11695c"/>波动提醒</label><label><radio value="target" checked="{{kind === 'target'}}" color="#11695c"/>目标价</label></radio-group>
       <view class="muted">{{kind === 'movement' ? '以时段内首个新报价为基准，上涨、下跌各提醒一次。' : '达到或越过目标即触发，每个监测日提醒一次。'}}</view>
-      <view class="field row"><text>{{kind === 'movement' ? '上下波动 ±' : '目标汇率'}}</text><input type="digit" value="amount" bindinput="amountChange" placeholder="{{kind === 'movement' ? '0.01' : '6.70'}}"/><text>元</text></view>
-      <picker wx:if="kind === 'target'" range="{{directions}}" value="directionIndex" bindchange="directionChange"><view class="field">{{directions[directionIndex]}} ▾</view></picker>
-      <button class="primary" bindtap="saveRule" loading="saving" disabled="saving">保存监测规则</button>
+      <view class="field row"><text>{{kind === 'movement' ? '上下波动 ±' : '目标汇率'}}</text><input type="digit" value="{{amount}}" bindinput="amountChange" placeholder="{{kind === 'movement' ? '0.01' : '6.70'}}"/><text>元</text></view>
+      <picker wx:if="{{kind === 'target'}}" range="{{directions}}" value="{{directionIndex}}" bindchange="directionChange"><view class="field">{{directions[directionIndex]}} ▾</view></picker>
+      <button class="primary" bindtap="saveRule" loading="{{saving}}" disabled="{{saving}}">保存监测规则</button>
       <button class="subscribe" bindtap="subscribe">授权微信提醒</button>
       <view class="muted">普通订阅消息通常为一次授权一次发送，不能保证无限后台推送；额度不足需重新授权。保存规则不会自动获得通知授权。</view>
-      <view wx:if="!status.notifications_ready" class="error small">微信通知尚未接入，当前仅记录触发事件。</view>
+      <view wx:if="{{!status.notifications_ready}}" class="error small">微信通知尚未接入，当前仅记录触发事件。</view>
     </view>
-    <view class="card"><view class="section">我的监测 <text class="muted">{{rules.length}} / 20</text></view><view wx:if="!rules.length" class="empty">还没有监测规则</view><view wx:for="rules" wx:key="id" class="rule"><view class="row"><text>{{item.kind === 'movement' ? '波动 ±' : (item.direction === 'above' ? '目标 ≥' : '目标 ≤')}} {{item.amount}} 元</text><text class="error small" data-id="{{item.id}}" bindtap="deleteRule">删除</text></view><view class="muted">每天 {{item.start}} – {{item.end}}</view></view></view>
+    <view class="card"><view class="section">我的监测 <text class="muted">{{rules.length}} / 20</text></view><view wx:if="{{!rules.length}}" class="empty">还没有监测规则</view><view wx:for="{{rules}}" wx:key="id" class="rule"><view class="row"><text>{{item.kind === 'movement' ? '波动 ±' : (item.direction === 'above' ? '目标 ≥' : '目标 ≤')}} {{item.amount}} 元</text><text class="error small" data-id="{{item.id}}" bindtap="deleteRule">删除</text></view><view class="muted">每天 {{item.start}} – {{item.end}}</view></view></view>
   </view>
-  <view wx:if="tab === 'alerts'" class="card"><view class="section">最近触发记录</view><view wx:if="!alerts.length" class="empty">暂未触发提醒</view><view wx:for="alerts" wx:key="id" class="rule"><view class="row"><text>{{item.label}} · {{item.price}} 元</text><text class="tag">{{item.statusLabel}}</text></view><view class="muted">{{item.displayTime}}</view><view class="muted">{{item.detail}}</view></view></view>
-  <view class="footer">中国银行现汇买入价 · 每 60 秒检查更新<br/>不是现钞买入价，也不是外汇市场成交价</view>
+  <view wx:if="{{tab === 'alerts'}}" class="card"><view class="section">最近触发记录</view><view wx:if="{{!alerts.length}}" class="empty">暂未触发提醒</view><view wx:for="{{alerts}}" wx:key="id" class="rule"><view class="row"><text>{{item.label}} · {{item.price}} 元</text><text class="tag">{{item.statusLabel}}</text></view><view class="muted">{{item.displayTime}}</view><view class="muted">{{item.detail}}</view></view></view>
+  <view class="footer"><view>中国银行现汇买入价 · 每 60 秒检查更新</view><view>不是现钞买入价，也不是外汇市场成交价</view></view>
 </view>
