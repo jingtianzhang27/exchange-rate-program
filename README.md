@@ -43,6 +43,21 @@ python3 -m backend.server --check-quote
 
 6. 用户登录、保存监测规则后点击“授权微信提醒”，在真机确认订阅。至少用真实模板完成一次端到端发送测试。服务端授权计数只是本地提示，微信平台才是实际配额来源。用户拒绝或没有额度时不会视为发送成功。
 
+### 登录失败诊断
+
+在微信开发者工具 Network 中选择 `/api/login`，查看 Response 的 `error`、`code` 和 `wechat_errcode`。服务端仅返回经过整理的错误说明和微信数字错误码，不转发可能带敏感信息的原始 `errmsg`。后端日志也会显示错误分类。
+
+| 返回字段 | 处理方式 |
+| --- | --- |
+| `code: wechat_config_missing` | 当前服务进程没有读到 AppID 或密钥。在设置并 export 变量的同一个终端重启后端；变量长度正确不代表旧进程已更新。 |
+| `wechat_errcode: 40013` | 检查后端 AppID，确认是小程序 AppID。 |
+| `wechat_errcode: 40125` | 密钥无效或与 AppID 不匹配，确认使用该小程序当前有效的密钥。 |
+| `wechat_errcode: 40029` | code 无效/过期，核对开发者工具项目 AppID 与后端一致、前端 `demo:false`，重新编译取得新的 `wx.login` code。 |
+| `wechat_errcode: 40163` | code 已使用，重新编译获取新 code，避免重放旧请求。 |
+| `code: wechat_upstream_error` / `wechat_tls_error` | 检查微信接口网络或 Python 证书配置。 |
+
+请勿分享 AppSecret、登录 code、会话 token 或带这些内容的请求截图。HTTP 400 本身不能说明密钥错误，应根据具体返回分类诊断。
+
 ### 可选 AI 分析
 
 在服务器设置 `AI_API_KEY`、`AI_MODEL`，必要时设置 `AI_BASE_URL`（默认 `https://api.openai.com/v1`），放行对应 HTTPS 域名。调用兼容 Chat Completions 接口，只向模型发送所选时段的报价统计，不发送用户身份。模型名称按你实际开通的服务填写。不配置时明确显示“历史统计 · 未接入 AI”，不会伪造 AI 结果。AI 只解释历史变化，不提供确定预测；若要逐点、新闻或宏观因子分析，需要另行接入数据。

@@ -15,7 +15,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from backend.core import SCALE, connect, history, init_db, now, record_quote, summarize, validate_rule
-from backend.integrations import WechatSender, analyze, dispatch, fetch_quote, quote_failure, wx_login
+from backend.integrations import WechatLoginError, WechatSender, analyze, dispatch, fetch_quote, quote_failure, wx_login
 
 LOG = logging.getLogger('rates')
 
@@ -150,6 +150,11 @@ def handler(app):
                 result = app.api(self.command,url.path,parse_qs(url.query),body,
                                  self.headers.get('Authorization','').removeprefix('Bearer '))
                 status, payload = result if isinstance(result,tuple) else (200,result)
+            except WechatLoginError as error:
+                status, payload = error.status, {'error':str(error),'code':error.code}
+                if error.wechat_errcode is not None:
+                    payload['wechat_errcode'] = error.wechat_errcode
+                LOG.warning('WeChat login/config failed: %s (wechat_errcode=%s)',error.code,error.wechat_errcode)
             except (ValueError,TypeError,KeyError):
                 status, payload = 400, {'error':'请求或服务配置无效，请检查时段、金额、登录及配置'}
             except Exception:

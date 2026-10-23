@@ -48,19 +48,49 @@ def fetch_quote():
     return parse_boc(raw.decode(charset))
 
 
+class WechatLoginError(ValueError):
+    """Only curated public messages; never forward WeChat errmsg or request URLs."""
+    def __init__(self, message, code, status=400, wechat_errcode=None):
+        super().__init__(message)
+        self.code, self.status, self.wechat_errcode = code, status, wechat_errcode
+
+
 def wx_config():
-    appid, secret = os.getenv('WX_APP_ID'), os.getenv('WX_APP_SECRET')
+    appid, secret = os.getenv('WX_APP_ID','').strip(), os.getenv('WX_APP_SECRET','').strip()
     if not appid or not secret:
-        raise ValueError('尚未配置微信 AppID / AppSecret')
+        raise WechatLoginError('启动后端的进程未读取到 WX_APP_ID 或 WX_APP_SECRET；请在设置变量的同一个终端重新启动后端',
+                               'wechat_config_missing',503)
     return appid, secret
 
 
 def wx_login(code):
     appid, secret = wx_config()
-    result = request_json('https://api.weixin.qq.com/sns/jscode2session?' + urllib.parse.urlencode({
-        'appid':appid, 'secret':secret, 'js_code':code, 'grant_type':'authorization_code'}))
-    if 'openid' not in result:
-        raise ValueError('微信登录失败，请重新登录')
+    try:
+        result = request_json('https://api.weixin.qq.com/sns/jscode2session?' + urllib.parse.urlencode({
+            'appid':appid, 'secret':secret, 'js_code':code, 'grant_type':'authorization_code'}))
+    except Exception as error:
+        reason = error.reason if isinstance(error,urllib.error.URLError) else error
+        if isinstance(reason,ssl.SSLCertVerificationError):
+            raise WechatLoginError('微信接口 HTTPS 证书验证失败，请修复 Python CA 证书配置',
+                                   'wechat_tls_error',502) from None
+        raise WechatLoginError('无法正常读取微信登录接口，请检查 api.weixin.qq.com 网络连接和代理',
+                               'wechat_upstream_error',502) from None
+    if not isinstance(result,dict):
+        raise WechatLoginError('微信登录接口返回格式异常，请稍后重试','wechat_response_invalid',502)
+    if result.get('errcode') or not isinstance(result.get('openid'),str) or not result.get('openid'):
+        errcode = result.get('errcode')
+        errcode = errcode if type(errcode) is int else None
+        messages = {
+            40013: '微信 AppID 无效，请核对后端 WX_APP_ID 与开发者工具项目 AppID',
+            40125: '微信 AppSecret 无效或与 AppID 不匹配；重置密钥后需在同一终端重新设置并重启后端',
+            40029: '微信登录 code 无效或已过期；请核对项目 AppID 与后端 WX_APP_ID 一致、前端 demo=false，然后重新编译获取新 code',
+            40163: '微信登录 code 已被使用，请重新编译获取新 code，不要重放旧请求',
+            45011: '微信登录请求过于频繁，请稍后重试',
+            40226: '微信平台拒绝了本次登录，请检查账号风险状态和平台提示',
+            -1: '微信登录服务繁忙，请稍后重试',
+        }
+        raise WechatLoginError(messages.get(errcode,'微信未接受本次登录，请根据 wechat_errcode 查询微信官方错误码说明'),
+                               'wechat_login_rejected',503 if errcode in (-1,45011) else 400,errcode)
     return result['openid']
 
 

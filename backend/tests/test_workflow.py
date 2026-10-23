@@ -194,6 +194,39 @@ class HttpTest(unittest.TestCase):
         self.assertEqual(self.call('/api/rules/'+rule['id'],'DELETE',token=token)[0],200)
         self.assertEqual(self.call('/api/rules',token=token)[1]['rules'],[])
 
+    def test_real_login_returns_safe_actionable_errors(self):
+        self.app.demo=False
+        with patch.dict('os.environ',{'WX_APP_ID':'','WX_APP_SECRET':''}):
+            status, body=self.call('/api/login','POST',{'code':'new-code'})
+        self.assertEqual(status,503)
+        self.assertEqual(body['code'],'wechat_config_missing')
+        with patch.dict('os.environ',{'WX_APP_ID':'wx-test','WX_APP_SECRET':'not-a-real-key'}):
+            for errcode in (40013,40125,40029,40163):
+                with self.subTest(errcode=errcode), patch('backend.integrations.request_json',return_value={
+                        'errcode':errcode,'errmsg':'sensitive token, secret and URL must never be returned'}):
+                    status,body=self.call('/api/login','POST',{'code':'private-code'})
+                    self.assertEqual(status,400)
+                    self.assertEqual(body['wechat_errcode'],errcode)
+                    self.assertNotIn('sensitive',json.dumps(body))
+                    self.assertNotIn('not-a-real-key',json.dumps(body))
+                    self.assertNotIn('private-code',json.dumps(body))
+
+    def test_real_login_transport_failure_and_success(self):
+        self.app.demo=False
+        with patch.dict('os.environ',{'WX_APP_ID':'wx-test','WX_APP_SECRET':'not-a-real-key'}):
+            with patch('backend.integrations.request_json',side_effect=urllib.error.URLError('private URL and secret')):
+                status, body=self.call('/api/login','POST',{'code':'new-code'})
+                self.assertEqual(status,502)
+                self.assertEqual(body['code'],'wechat_upstream_error')
+                self.assertNotIn('private',json.dumps(body))
+            with patch('backend.integrations.request_json',return_value={'openid':'real-user-test','session_key':'never-return-this'}):
+                status,body=self.call('/api/login','POST',{'code':'new-code'})
+                self.assertEqual(status,200)
+                self.assertFalse(body['demo'])
+                self.assertIn('token',body)
+                self.assertNotIn('never-return-this',json.dumps(body))
+                self.assertEqual(self.call('/api/status',token=body['token'])[0],200)
+
 
 if __name__ == '__main__':
     unittest.main()
