@@ -4,6 +4,7 @@ import threading
 import unittest
 import urllib.error
 import urllib.request
+import ssl
 from datetime import datetime, timedelta
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -11,7 +12,7 @@ from unittest.mock import patch
 
 from backend.core import TZ, connect, history, init_db, parse_boc, record_quote, summarize, units, validate_rule, window_day
 from backend.server import Application, handler
-from backend.integrations import dispatch, analyze
+from backend.integrations import dispatch, analyze, quote_failure
 
 
 class RulesTest(unittest.TestCase):
@@ -40,6 +41,31 @@ class RulesTest(unittest.TestCase):
         self.assertEqual(stamp,'2026-10-22T09:00:00+08:00')
         with self.assertRaises(ValueError):
             parse_boc(html.replace('现汇买入价','未知栏目'))
+
+    def test_boc_slash_date_in_date_cell_and_repeated_time_cell(self):
+        # Current BOC layout has a full slash-separated datetime in 发布日期,
+        # followed by a separate 发布时间 cell. Cashless/cash values differ here
+        # deliberately so a wrong price-column selection cannot pass.
+        template = '''<table><tr><th>货币名称</th><th>现汇买入价</th><th>现钞买入价</th><th>现汇卖出价</th><th>现钞卖出价</th><th>中行折算价</th><th>发布日期</th><th>发布时间</th></tr>
+          <tr data-currency="美元"><td>美元</td><td>666.06</td><td>665.00</td><td>668.86</td><td>668.86</td><td>671.8</td><td class="pjrq">DATE 15:38:18</td><td>15:38:18</td></tr></table>'''
+        for date in ('2026/10/23','2026-10-23','2026.10.23'):
+            with self.subTest(date=date):
+                price, stamp = parse_boc(template.replace('DATE',date))
+                self.assertEqual(price,6660600)
+                self.assertEqual(stamp,'2026-10-23T15:38:18+08:00')
+
+    def test_quote_diagnostics_classify_without_exposing_secrets(self):
+        secret_url='https://user:do-not-print@example.test/?token=private'
+        http_error=urllib.error.HTTPError(secret_url,403,'private message',{},None)
+        self.assertIn('HTTP 403',quote_failure(http_error))
+        cert_error=urllib.error.URLError(ssl.SSLCertVerificationError('private message'))
+        self.assertIn('证书验证失败',quote_failure(cert_error))
+        timeout=urllib.error.URLError(TimeoutError('private message'))
+        self.assertIn('超时',quote_failure(timeout))
+        for error in (http_error,cert_error,timeout,ValueError('private message'),RuntimeError(secret_url)):
+            message=quote_failure(error)
+            self.assertNotIn('private',message)
+            self.assertNotIn('do-not-print',message)
 
     def test_threshold_exact_and_no_duplicates_both_directions(self):
         self.add_rule()

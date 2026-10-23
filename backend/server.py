@@ -15,7 +15,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from backend.core import SCALE, connect, history, init_db, now, record_quote, summarize, validate_rule
-from backend.integrations import WechatSender, analyze, dispatch, fetch_quote, wx_login
+from backend.integrations import WechatSender, analyze, dispatch, fetch_quote, quote_failure, wx_login
 
 LOG = logging.getLogger('rates')
 
@@ -38,9 +38,9 @@ class Application:
                 price, stamp = fetch_quote()
             record_quote(self.path,price,stamp)
             self.collect_error = None
-        except Exception:
-            self.collect_error = '行情采集失败，请检查中行网络访问及页面结构'
-            LOG.warning('quote collection failed (credential-bearing exceptions suppressed)')
+        except Exception as error:
+            self.collect_error = quote_failure(error)
+            LOG.warning('quote collection failed: %s', self.collect_error)
         if not self.demo:
             dispatch(self.path,self.sender)
 
@@ -175,7 +175,15 @@ def main():
     parser.add_argument('--host',default='127.0.0.1')
     parser.add_argument('--port',type=int,default=8000)
     parser.add_argument('--db')
+    parser.add_argument('--check-quote',action='store_true',help='Fetch a real BOC quote once, without starting the server or requiring WeChat credentials')
     args = parser.parse_args()
+    if args.check_quote:
+        try:
+            price, stamp = fetch_quote()
+        except Exception as error:
+            parser.exit(1,quote_failure(error)+'\n')
+        print(json.dumps({'source':'中国银行美元现汇买入价','price':price/SCALE,'stamp':stamp,'demo':False},ensure_ascii=False))
+        return
     path = args.db or ('.data/demo.sqlite3' if args.demo else '.data/rates.sqlite3')
     Path(path).parent.mkdir(parents=True,exist_ok=True)
     app = Application(path,args.demo)

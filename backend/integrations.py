@@ -1,11 +1,36 @@
 import json
 import os
+import socket
+import ssl
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime
 
 from backend.core import SCALE, now, parse_boc, connect
+
+
+def quote_failure(error):
+    """Classify public quote failures without printing URLs, headers or credentials."""
+    if isinstance(error, urllib.error.HTTPError):
+        return f'中行行情请求返回 HTTP {error.code}，请检查网站访问限制或网络代理'
+    reason = error.reason if isinstance(error, urllib.error.URLError) else error
+    if isinstance(reason, ssl.SSLCertVerificationError):
+        return '中行 HTTPS 证书验证失败，请修复 Python 的 CA 证书配置，不要关闭证书验证'
+    if isinstance(reason, ssl.SSLError):
+        return '中行 HTTPS 连接失败，请检查 TLS 和网络代理配置'
+    if isinstance(reason, (TimeoutError, socket.timeout)):
+        return '中行行情请求超时，请检查网络后重试'
+    if isinstance(reason, socket.gaierror):
+        return '中行域名解析失败，请检查 DNS 和网络配置'
+    if isinstance(error, urllib.error.URLError):
+        return '无法连接中行行情网站，请检查网络、代理和网站访问权限'
+    if isinstance(error, UnicodeError):
+        return '中行页面字符编码解析失败'
+    if isinstance(error, ValueError):
+        return '中行页面解析失败，请检查牌价表格、价格和发布时间格式'
+    return '行情处理失败，请检查本地数据库及服务运行状态'
 
 
 def request_json(url, payload=None, headers=None):

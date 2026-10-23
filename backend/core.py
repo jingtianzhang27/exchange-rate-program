@@ -64,10 +64,11 @@ def parse_boc(html):
                 raise ValueError('中行表格结构变化：无法确认现汇买入价列')
             price = units(Decimal(row[price_col].replace(',', '')) / 100)
             text = ' '.join(row[-2:])
-            match = re.search(r'(\d{4}[.-]\d{2}[.-]\d{2})\s*(\d{2}:\d{2}:\d{2})', text)
+            match = re.search(r'(\d{4}[./-]\d{2}[./-]\d{2})\s*(\d{2}:\d{2}:\d{2})', text)
             if not match:
                 raise ValueError('无法解析中行报价时间')
-            stamp = datetime.strptime(' '.join(match.groups()).replace('.', '-'), '%Y-%m-%d %H:%M:%S').replace(tzinfo=TZ)
+            normalized = ' '.join(match.groups()).replace('.', '-').replace('/', '-')
+            stamp = datetime.strptime(normalized, '%Y-%m-%d %H:%M:%S').replace(tzinfo=TZ)
             return price, stamp.isoformat()
     raise ValueError('中行页面未找到美元现汇买入价')
 
