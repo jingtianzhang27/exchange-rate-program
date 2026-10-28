@@ -12,10 +12,21 @@ from unittest.mock import patch
 
 from backend.core import TZ, connect, history, init_db, parse_boc, record_quote, summarize, units, validate_rule, window_day
 from backend.server import Application, handler
-from backend.integrations import dispatch, analyze, quote_failure
+from backend.integrations import dispatch, analyze, quote_failure, WechatSender
 
 
 class RulesTest(unittest.TestCase):
+    def test_exchange_rate_template_payload(self):
+        mapping={'character_string1':'price','thing5':'reason','time2':'time','thing3':'bank','thing4':'currency'}
+        with patch.dict('os.environ',{'WX_APP_ID':'wx-test','WX_APP_SECRET':'test-only','WX_TEMPLATE_ID':'test-template',
+                                     'WX_TEMPLATE_MAPPING':json.dumps(mapping)}), \
+             patch('backend.integrations.request_json',side_effect=[{'access_token':'test-token','expires_in':7200},{'errcode':0}]) as request:
+            WechatSender().send('test-user',{'price':6660600,'stamp':'2026-10-28T15:38:18+08:00','side':'up'})
+            payload=request.call_args.args[1]
+            self.assertEqual(payload['data'],{'character_string1':{'value':'6.6606'},'thing5':{'value':'涨幅达标'},
+                                             'time2':{'value':'2026-10-28 15:38:18'},'thing3':{'value':'中国银行'},
+                                             'thing4':{'value':'美元兑人民币'}})
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.path = str(Path(self.tmp.name)/'test.db')

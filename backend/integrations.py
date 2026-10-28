@@ -113,6 +113,7 @@ class WechatSender:
         # Map approved WeChat template field names to semantic values, never assume template IDs.
         mapping = json.loads(os.environ['WX_TEMPLATE_MAPPING'])
         values = {'price': f'{alert["price"]/SCALE:.4f}', 'time': alert['stamp'][:19].replace('T',' '),
+                  'bank':'中国银行', 'currency':'美元兑人民币',
                   'title':'美元结汇价提醒', 'reason': {'up':'涨幅达标','down':'跌幅达标','above':'达到目标上限','below':'达到目标下限'}[alert['side']]}
         if not mapping or any(v not in values for v in mapping.values()):
             raise ValueError('微信模板字段映射无效')
