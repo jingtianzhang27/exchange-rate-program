@@ -1,0 +1,12 @@
+# Only backend source is needed. Never send local credentials or databases to builds.
+**
+!Dockerfile
+!.dockerignore
+!backend/
+!backend/**
+backend/**/__pycache__/
+backend/**/*.pyc
+backend/tests/
+backend/**/.env*
+backend/**/*.sqlite*
+backend/**/*.log
