@@ -1,4 +1,5 @@
 const app = getApp()
+const { request } = require('../../utils/request')
 const pad = n => String(n).padStart(2, '0')
 function beijingDate(date) {
   const d = new Date(date.getTime() + 8 * 3600000)
@@ -33,15 +34,12 @@ Page({
     try { await this.loginPending } finally { this.loginPending = null }
   },
   http(path, method = 'GET', data, authenticated = true) {
-    return new Promise((resolve, reject) => wx.request({
-      url: app.globalData.apiBase + path, method, data, timeout: 35000,
-      header: authenticated ? { Authorization: `Bearer ${this.token}` } : {},
-      success: r => {
+    return request(app.globalData, path, method, data, authenticated ? this.token : null)
+      .then(r => {
         if (r.statusCode === 401) this.token = null
-        if (r.statusCode >= 200 && r.statusCode < 300) resolve(r.data)
-        else reject(new Error(r.data.error || `服务错误 ${r.statusCode}`))
-      }, fail: () => reject(new Error('无法连接服务，请检查后端、HTTPS 合法域名及网络'))
-    }))
+        if (r.statusCode >= 200 && r.statusCode < 300) return r.data
+        throw new Error((r.data && r.data.error) || `服务错误 ${r.statusCode}`)
+      })
   },
   async api(path, method, data) {
     if (!this.token) await this.login()

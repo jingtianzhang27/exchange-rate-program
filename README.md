@@ -11,7 +11,7 @@ python3 -m unittest discover -s backend/tests -v
 python3 -m backend.server --demo --port 8000
 ```
 
-演示模式自动生成约 4 小时的**模拟行情**，并每分钟更新；独立数据库 `.data/demo.sqlite3`，不发送微信消息。微信开发者工具导入 `miniprogram/`，项目 AppID 已配置为 `wxfab79228c5d3d1a6`，扫码微信需有该小程序的开发权限。`app.js` 默认 `demo: true`、API 为本机 8000 端口。仅本地调试时，在开发者工具本地设置中关闭请求合法域名校验；项目默认开启校验。手机真机无法连接电脑的 `127.0.0.1`，需可达的 HTTPS 后端。
+演示模式自动生成约 4 小时的**模拟行情**，并每分钟更新；独立数据库 `.data/demo.sqlite3`，不发送微信消息。微信开发者工具导入 `miniprogram/`，项目 AppID 已配置为 `wxfab79228c5d3d1a6`，扫码微信需有该小程序的开发权限。`app.js` 现在默认使用微信云托管、`demo: false`；本地演示需手动设置 `transport: 'http'`、`demo: true`，保留 `apiBase: 'http://127.0.0.1:8000'`。仅本地调试时，在开发者工具本地设置中关闭请求合法域名校验；项目默认开启校验。手机真机无法连接电脑的 `127.0.0.1`，需可达的 HTTPS 后端。
 
 服务端验证接口（本地内部验证，无浏览器预览）：
 
@@ -22,7 +22,7 @@ curl http://127.0.0.1:8000/health
 ## 接入真实行情与微信
 
 1. 在服务器安全环境设置中注入 `.env.example` 列出的微信配置。不要将密钥放进小程序或 Git。后端读取进程环境，**不会自动读取 `.env` 文件**。
-2. `miniprogram/project.config.json` 已配置 AppID `wxfab79228c5d3d1a6`；在运行后端的终端设置 `export WX_APP_ID='wxfab79228c5d3d1a6'`，并安全配置该小程序对应的 AppSecret。`.env.example` 仅作配置参考，不会自动加载。开发者工具的实际 AppID 必须与后端一致；若使用其他小程序，需同时修改前后端 AppID 与对应密钥。`app.js` 中设 `demo: false`；本地模拟器可保留 `http://127.0.0.1:8000`，正式使用时将 `apiBase` 换成自己的 HTTPS 后端域名。
+2. `miniprogram/project.config.json` 已配置 AppID `wxfab79228c5d3d1a6`；在运行后端的终端设置 `export WX_APP_ID='wxfab79228c5d3d1a6'`，并安全配置该小程序对应的 AppSecret。`.env.example` 仅作配置参考，不会自动加载。开发者工具的实际 AppID 必须与后端一致；若使用其他小程序，需同时修改前后端 AppID 与对应密钥。`app.js` 中设 `demo: false`。默认 `transport: 'cloud'` 使用指定微信云托管环境；若直接连接本地或自有 HTTPS 后端，设置 `transport: 'http'`，再配置 `apiBase`。参见 [云托管说明](deploy/WECHAT_CLOUDRUN.md)。
 3. 在小程序管理后台配置 `request` 合法域名，开通适合业务类目的订阅消息模板，核实该主体/类目是否允许所需提醒。普通订阅消息不是无限推送，通常一次授权只能发送一次。长期订阅受微信类目资格限制。
 4. 设置 `WX_TEMPLATE_ID`，并按**实际审核通过的模板字段和类型**配置 `WX_TEMPLATE_MAPPING` JSON。示例字段名仅作演示，不是现成模板。可映射 `title`、`price`、`time`、`reason`、`bank`（中国银行）、`currency`（美元兑人民币）；模板应能接收这些值且长度符合要求。服务器出口 IP 如有需要，应加入微信接口 IP 白名单。
 5. 放行 `www.boc.cn:443`（行情）和 `api.weixin.qq.com:443`（登录、access_token、订阅发送），启动：
