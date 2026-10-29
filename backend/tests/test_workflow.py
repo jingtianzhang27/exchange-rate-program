@@ -230,6 +230,14 @@ class HttpTest(unittest.TestCase):
                 self.assertEqual(status,502)
                 self.assertEqual(body['code'],'wechat_upstream_error')
                 self.assertNotIn('private',json.dumps(body))
+            cert_error=ssl.SSLCertVerificationError('private secret-bearing request URL')
+            cert_error.verify_code=20
+            with patch('backend.integrations.request_json',side_effect=urllib.error.URLError(cert_error)):
+                status,body=self.call('/api/login','POST',{'code':'new-code'})
+                self.assertEqual(status,502)
+                self.assertEqual(body['code'],'wechat_tls_error')
+                self.assertIn('verify_code=20',body['error'])
+                self.assertNotIn('private',json.dumps(body))
             with patch('backend.integrations.request_json',return_value={'openid':'real-user-test','session_key':'never-return-this'}):
                 status,body=self.call('/api/login','POST',{'code':'new-code'})
                 self.assertEqual(status,200)

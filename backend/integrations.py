@@ -55,6 +55,23 @@ class WechatLoginError(ValueError):
         self.code, self.status, self.wechat_errcode = code, status, wechat_errcode
 
 
+def certificate_failure(error):
+    # Only return the numeric verification code and curated descriptions. Raw
+    # urllib errors can contain the full login URL with secret and login code.
+    code = getattr(error,'verify_code',None)
+    code = code if type(code) is int else None
+    descriptions = {
+        9:'证书尚未生效，请检查服务器时间和对端证书',
+        10:'证书已过期，请检查服务器时间和对端证书',
+        18:'遇到自签名证书，请检查云端出站代理及其官方 CA 配置',
+        19:'证书链含未受信任的自签名证书，请检查云端代理及其官方 CA 配置',
+        20:'无法找到证书颁发者，请检查 CA 根证书、对端证书链及出站代理',
+        21:'无法验证证书链，请检查 CA 根证书、对端证书链及出站代理',
+        62:'证书主机名不匹配，请检查 DNS 和出站代理',
+    }
+    return '微信接口 HTTPS 证书验证失败（verify_code=' + str(code) + '）：' + descriptions.get(code,'需要检查云端 CA、证书链和网络代理配置')
+
+
 def wx_config():
     appid, secret = os.getenv('WX_APP_ID','').strip(), os.getenv('WX_APP_SECRET','').strip()
     if not appid or not secret:
@@ -71,7 +88,7 @@ def wx_login(code):
     except Exception as error:
         reason = error.reason if isinstance(error,urllib.error.URLError) else error
         if isinstance(reason,ssl.SSLCertVerificationError):
-            raise WechatLoginError('微信接口 HTTPS 证书验证失败，请修复 Python CA 证书配置',
+            raise WechatLoginError(certificate_failure(reason),
                                    'wechat_tls_error',502) from None
         raise WechatLoginError('无法正常读取微信登录接口，请检查 api.weixin.qq.com 网络连接和代理',
                                'wechat_upstream_error',502) from None
