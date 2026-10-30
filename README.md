@@ -43,6 +43,8 @@ curl http://127.0.0.1:8000/health
 
 对象存储快照只能解决「数据别丢」，解决不了「多实例分裂」；单实例仍然是前提。完整的云托管部署步骤和踩坑见 [deploy/WECHAT_CLOUDRUN.md](deploy/WECHAT_CLOUDRUN.md)。
 
+这类「单实例 + SQLite + 云托管」小程序的通用部署模板、踩坑总表和运维清单见 [deploy/DEPLOY_PLAYBOOK.md](deploy/DEPLOY_PLAYBOOK.md)。
+
 ## 接入真实行情与微信
 
 1. 在服务器安全环境设置中注入 `.env.example` 列出的微信配置。不要将密钥放进小程序或 Git。后端读取进程环境，**不会自动读取 `.env` 文件**。
