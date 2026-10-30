@@ -1,0 +1,107 @@
+name: CloudRun deploy guard
+
+# Primary path: the WeChat CloudRun push webhook builds and deploys this commit.
+# That webhook intermittently answers 502 (see GitHub Settings -> Webhooks ->
+# Recent Deliveries), so this workflow verifies the deployment and, if nothing
+# went live, deploys the same commit through the CloudRun CLI. It retries the
+# version check at intervals and fails the run when no deployment is observed.
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: cloudrun-deploy-guard
+  cancel-in-progress: false
+
+env:
+  # 在仓库 Settings -> Secrets and variables -> Actions -> Variables 里配置；
+  # 不改变量时用下面的占位默认值，请替换成自己的环境 ID 和服务名。
+  ENV_ID: ${{ vars.CLOUDRUN_ENV_ID || 'prod-xxxxxxxx' }}
+  SERVICE: ${{ vars.CLOUDRUN_SERVICE || 'exchange-rate-api' }}
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install CloudRun CLI
+        run: npm install -g @wxcloud/cli@2.3.3
+
+      - name: Login
+        env:
+          WX_APPID: ${{ secrets.WX_APPID }}
+          WX_CLI_KEY: ${{ secrets.WX_CLI_KEY }}
+        run: wxcloud login --appId "$WX_APPID" --privateKey "$WX_CLI_KEY"
+
+      - name: Verify deployment, fall back to CLI deploy
+        env:
+          PUSH_TS: ${{ github.event.head_commit.timestamp }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          push_epoch=$(date -u -d "$PUSH_TS" +%s)
+          echo "push commit $SHA at $PUSH_TS (epoch $push_epoch)"
+
+          # A deployment counts when a version created at/after this push has
+          # status "normal". CloudRun reports version times in Asia/Shanghai.
+          check_deployed() {
+            wxcloud version:list --envId "$ENV_ID" --serviceName "$SERVICE" > /tmp/versions.txt 2>&1 || true
+            awk -F'│' -v push="$push_epoch" '
+              /exchange-rate-api-/ {
+                name=$2; status=$3; created=$4;
+                gsub(/^[ \t]+|[ \t]+$/, "", name);
+                gsub(/^[ \t]+|[ \t]+$/, "", status);
+                gsub(/^[ \t]+|[ \t]+$/, "", created);
+                if (created ~ /^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$/) {
+                  cmd = "date -u -d \"" created "\" +%s";
+                  cmd | getline epoch; close(cmd);
+                  epoch = epoch - 8*3600;
+                  if (status == "normal" && epoch >= push - 60) { found = 1; print name, status, created }
+                }
+              }
+              END { exit(found ? 0 : 1) }
+            ' /tmp/versions.txt
+          }
+
+          wait_deployed() {
+            local tries="$1"
+            for i in $(seq 1 "$tries"); do
+              echo "check attempt $i/$tries"
+              if check_deployed; then echo "deployment observed"; return 0; fi
+              sleep 60
+            done
+            return 1
+          }
+
+          echo "== waiting for the webhook build =="
+          if wait_deployed 6; then
+            echo "deployed via push webhook"
+            exit 0
+          fi
+
+          echo "== webhook deploy not observed, deploying through CLI =="
+          wxcloud run:deploy . \
+            --envId "$ENV_ID" \
+            --serviceName "$SERVICE" \
+            --containerPort 8000 \
+            --dockerfile Dockerfile \
+            --override --noConfirm --detach \
+            --targetDir=. \
+            --remark "ci fallback: $SHA"
+          # --targetDir and --remark keep the CLI non-interactive.
+
+          echo "== waiting for the fallback build =="
+          if wait_deployed 8; then
+            echo "deployed via CLI fallback"
+            exit 0
+          fi
+
+          echo "::error::No successful CloudRun deployment observed for commit $SHA"
+          exit 1

@@ -6,6 +6,8 @@ import logging
 import math
 import os
 import secrets
+import signal
+import socket
 import threading
 import time
 import uuid
@@ -16,6 +18,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from backend.core import SCALE, connect, history, init_db, now, record_quote, summarize, validate_rule
 from backend.integrations import WechatLoginError, WechatSender, analyze, dispatch, fetch_quote, quote_failure, wx_login
+from backend.storage import BackupManager
 
 LOG = logging.getLogger('rates')
 
@@ -26,6 +29,7 @@ class Application:
         self.last_attempt = None
         self.collect_error = None
         self.sender = WechatSender()
+        self.backup = None
         init_db(path)
 
     def collect(self):
@@ -51,7 +55,22 @@ class Application:
 
     def api(self, method, path, query, body, token):
         if path == '/health' and method == 'GET':
-            return {'ok':True,'demo':self.demo,'last_attempt':self.last_attempt,'collection_error':self.collect_error}
+            health = {'ok':True,'demo':self.demo,'last_attempt':self.last_attempt,
+                      'collection_error':self.collect_error,'instance':socket.gethostname()}
+            if self.backup is not None:
+                status = self.backup.status()
+                health['backup'] = status
+                health['backup_enabled'] = status['enabled']
+                health['backup_last_ok_at'] = status['last_ok_at']
+                health['backup_last_error'] = status['last_error']
+                health['backup_restored_from'] = status['restored_from']
+                health['backup_restore_failed'] = status['restore_failed']
+            try:
+                with connect(self.path) as db:
+                    health['db_quotes'] = db.execute('SELECT COUNT(*) FROM quotes').fetchone()[0]
+            except Exception:
+                health['db_quotes'] = None
+            return health
         if path == '/api/login' and method == 'POST':
             code = body.get('code')
             if not isinstance(code,str) or not 1 <= len(code) <= 512:
@@ -191,7 +210,13 @@ def main():
         return
     path = args.db or ('.data/demo.sqlite3' if args.demo else '.data/rates.sqlite3')
     Path(path).parent.mkdir(parents=True,exist_ok=True)
+    backup = None if args.demo else BackupManager(path)
+    if backup is not None:
+        backup.restore_if_missing()
     app = Application(path,args.demo)
+    app.backup = backup
+    if backup is not None and backup.start():
+        LOG.info('object storage backup enabled (every %ss)', backup.interval)
     if args.demo:
         # Explicit synthetic history, isolated from production data.
         with connect(path) as db:
@@ -210,7 +235,15 @@ def main():
             time.sleep(60)
     threading.Thread(target=worker,daemon=True).start()
     logging.basicConfig(level=logging.INFO)
-    LOG.info('mode=%s port=%s', 'SYNTHETIC DEMO' if args.demo else 'BOC LIVE',args.port)
+    LOG.info('mode=%s port=%s instance=%s', 'SYNTHETIC DEMO' if args.demo else 'BOC LIVE',args.port,socket.gethostname())
+
+    def stop(signum, frame):
+        if backup is not None:
+            backup.backup_once()
+        os._exit(0)
+
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
     ThreadingHTTPServer((args.host,args.port),handler(app)).serve_forever()
 
 

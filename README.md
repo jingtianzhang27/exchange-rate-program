@@ -1,6 +1,6 @@
 # 美元结汇观察 · 微信小程序
 
-监测中国银行 **美元现汇买入价**（银行买入美元、用户结汇的参考价），支持每天指定时段的波动提醒、目标价提醒、自选时段曲线与可选 AI 分析。小程序原生界面，Python 3.11+ 标准库后端，SQLite 持久化，无第三方运行依赖。
+监测中国银行 **美元现汇买入价**（银行买入美元、用户结汇的参考价），支持每天指定时段的波动提醒、目标价提醒、自选时段曲线与可选 AI 分析。小程序原生界面，Python 3.11+ 标准库后端，SQLite 持久化。镜像里唯一的第三方依赖是对象存储快照用的 `cos-python-sdk-v5`，缺失时备份自动禁用，不影响服务运行。
 
 ## 本地运行
 
@@ -18,6 +18,30 @@ python3 -m backend.server --demo --port 8000
 ```bash
 curl http://127.0.0.1:8000/health
 ```
+
+## 数据持久化与备份（云托管）
+
+生产数据写在容器本地 `/data/rates.sqlite3`（SQLite，WAL 模式；报价以银行发布时间为主键，天然去重）。容器磁盘不跨实例共享，所以云托管服务要保持**单实例**（最小 1 / 最大 1）；要扩多实例需要先把存储换成云托管 MySQL。
+
+镜像内置快照备份（`backend/storage.py`）：
+
+- 每 `BACKUP_INTERVAL_SECONDS`（默认 600 秒）以及收到 SIGTERM 时，用 SQLite 在线 backup 生成一致性快照，上传到云托管对象存储的 `backups/` 下，默认保留最近 24 份
+- 启动时如果 `/data/rates.sqlite3` 不存在，自动下载最新快照恢复，因此重新部署不会丢历史
+- 访问对象存储不需要手工申请 COS 密钥：容器内调用平台接口 `GET http://api.weixin.qq.com/_/cos/getauth` 获取当前环境存储桶的临时密钥，密钥只在内存中使用
+- `GET /health` 会返回 `instance`、`backup_enabled`、`backup_last_ok_at`、`backup_last_error`、`backup_restored_from`、`backup_restore_failed`、`db_quotes`，可以直接判断备份和恢复状态
+
+可选环境变量：
+
+| 变量 | 默认值 |
+| --- | --- |
+| `COS_BUCKET` | 无；不配置就不启用备份（桶名在控制台「对象存储 → 存储配置」） |
+| `COS_REGION` | `ap-shanghai` |
+| `COS_BACKUP_PREFIX` | `backups/` |
+| `BACKUP_INTERVAL_SECONDS` | `600` |
+| `BACKUP_KEEP` | `24` |
+| `BACKUP_ENABLED` | `1`（设 `0` 关闭） |
+
+对象存储快照只能解决「数据别丢」，解决不了「多实例分裂」；单实例仍然是前提。完整的云托管部署步骤和踩坑见 [deploy/WECHAT_CLOUDRUN.md](deploy/WECHAT_CLOUDRUN.md)。
 
 ## 接入真实行情与微信
 
