@@ -4,6 +4,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     TZ=Asia/Shanghai
 
+# Snapshot backups use the official COS SDK through the CloudRun temporary
+# credentials endpoint. The runtime keeps working without it (backup disabled).
+RUN pip install --no-cache-dir cos-python-sdk-v5==1.9.44
+
 # The official Python image supplies CA roots and the IANA timezone database.
 # Fail the build if either prerequisite is missing; never bypass TLS verification.
 RUN python -c "import ssl; from zoneinfo import ZoneInfo; assert ssl.create_default_context().get_ca_certs(); ZoneInfo('Asia/Shanghai')" \
@@ -22,4 +26,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4).read()"
 
-CMD ["python", "-m", "backend.server", "--host", "0.0.0.0", "--port", "8000", "--db", "/data/rates.sqlite3"]
+# Trust the platform-provided certificate for intercepted WeChat API hosts.
+CMD ["sh", "backend/entrypoint.sh"]

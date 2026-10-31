@@ -1,12 +1,25 @@
-# Only backend source is needed. Never send local credentials or databases to builds.
-**
-!Dockerfile
-!.dockerignore
-!backend/
-!backend/**
-backend/**/__pycache__/
-backend/**/*.pyc
-backend/tests/
-backend/**/.env*
-backend/**/*.sqlite*
-backend/**/*.log
+# Keep builds small and free of local credentials, caches and databases.
+# The CloudRun CLI packages this project with this file and turns it into glob
+# ignore patterns. Negations ("!...", allow-lists) are not supported there and
+# make the CLI upload an empty package, so only plain excludes are allowed here.
+.git
+.git/**
+.github
+.github/**
+miniprogram
+miniprogram/**
+deploy
+deploy/**
+.data
+.data/**
+node_modules
+node_modules/**
+**/__pycache__
+**/__pycache__/**
+**/*.pyc
+**/.env
+**/.env.*
+**/*.sqlite3
+**/*.sqlite3-*
+**/*.log
+*.md
